@@ -5,7 +5,7 @@ import base64
 import io
 from PyPDF2 import PdfReader
 
-################### FUNCTIONS ###########################################################################################
+################### FUNCTIONS ##########################################################################################
 
 def extract_text_from_pdf(pdf_data):
     pdf_reader = PdfReader(io.BytesIO(pdf_data))
@@ -16,13 +16,11 @@ def extract_text_from_pdf(pdf_data):
         text += f"\n\n>>>>>>>>>>> End Page {npage} of {npages} <<<<<<<<<<<<<\n\n"
     return text
 
-# Initialize the app with a Bootstrap theme
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+################### PAGES ###############################################################################################
 
-################### LAYOUT #############################################################################################
 page0 = html.Div([
     html.H1("Welcome to the Dash App")
-])
+], id='page-0', style={'display': 'none'})
 
 page1 = html.Div([
     html.H1("Step 1: Upload document"),
@@ -44,107 +42,111 @@ page1 = html.Div([
         multiple=False
     ),
     html.Div(id='output-pdf')
-])
+], id='page-1', style={'display': 'none'})
 
 page2 = html.Div([
     html.H1("Step 2: Summarize")
-])
+], id='page-2', style={'display': 'none'})
 
 page3 = html.Div([
     html.H1("Step 3: Set the style")
-])
+], id='page-3', style={'display': 'none'})
 
 page4 = html.Div([
     html.H1("Step 4: Convert to Audio")
-])
+], id='page-4', style={'display': 'none'})
 
-# Sidebar layout
-sidebar = dbc.Col(
-    [
-        # Top half: Page selection
-        dbc.Nav(
-            [
-                dbc.NavLink("HOME", href="/", id="home-link"),
-                dbc.NavLink("STEP 1: Upload document", href="/page-1", id="page-1-link"),
-                dbc.NavLink("STEP 2: Summarize", href="/page-2", id="page-2-link"),
-                dbc.NavLink("STEP 3: Set the style", href="/page-3", id="page-3-link"),
-                dbc.NavLink("STEP 4: Convert to Audio", href="/page-4", id="page-4-link"),
-            ],
-            vertical=True,
-            pills=True,
-        ),
-        html.Hr(),
-        # Bottom half: Previous projects
-        html.Div(
-            [
-                html.H5("Previous Projects"),
-                dcc.Dropdown(
-                    id='previous-projects-dropdown',
-                    options=[
-                        {'label': 'Project 1', 'value': 'proj1'},
-                        {'label': 'Project 2', 'value': 'proj2'},
-                        {'label': 'Project 3', 'value': 'proj3'},
-                    ],
-                    placeholder="Load a project"
-                )
-            ],
-            style={'marginTop': '20px'}
-        )
-    ],
-    width=3,
-    style={'position': 'fixed', 'height': '100%', 'padding': '20px', 'width': '300px'}
-)
+################### LAYOUT #############################################################################################
 
-# Main content layout
-content = dbc.Col(
-    html.Div(id='page-content'),
-    width=9,
-    style={'marginLeft': '300px', 'padding': '20px'}
-)
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 
-# App layout
-app.layout = dbc.Container(
-    [
-        dcc.Location(id='url'),
-        sidebar,
-        content
-    ],
-    fluid=True
-)
+def serve_layout():
+    sidebar = dbc.Col(
+        [
+            dbc.Nav(
+                [
+                    dbc.NavLink("HOME", href="/", id="home-link"),
+                    dbc.NavLink("STEP 1: Upload document", href="/page-1", id="page-1-link"),
+                    dbc.NavLink("STEP 2: Summarize", href="/page-2", id="page-2-link"),
+                    dbc.NavLink("STEP 3: Set the style", href="/page-3", id="page-3-link"),
+                    dbc.NavLink("STEP 4: Convert to Audio", href="/page-4", id="page-4-link"),
+                ],
+                vertical=True,
+                pills=True,
+            ),
+            html.Hr(),
+            html.Div(
+                [
+                    html.H5("Previous Projects"),
+                    dcc.Dropdown(
+                        id='previous-projects-dropdown',
+                        options=[
+                            {'label': 'Project 1', 'value': 'proj1'},
+                            {'label': 'Project 2', 'value': 'proj2'},
+                            {'label': 'Project 3', 'value': 'proj3'},
+                        ],
+                        placeholder="Load a project"
+                    )
+                ],
+                style={'marginTop': '20px'}
+            )
+        ],
+        width=3,
+        style={'position': 'fixed', 'height': '100%', 'padding': '20px', 'width': '300px'}
+    )
+    
+  # Main content layout with all pages
+    content = dbc.Col(
+        html.Div([
+            page0,
+            page1,
+            page2,
+            page3,
+            page4
+        ]),
+        width=9,
+        style={'marginLeft': '300px', 'padding': '20px'}
+    )
+    
+    return dbc.Container(
+        [
+            dcc.Location(id='url'),
+            sidebar,
+            content
+        ],
+        fluid=True
+    )
+
+app.layout = serve_layout
 
 ################### CALLBACKS ##########################################################################################
 @app.callback(
-    Output('page-content', 'children'),
+    [
+        Output('page-0', 'style'),
+        Output('page-1', 'style'),
+        Output('page-2', 'style'),
+        Output('page-3', 'style'),
+        Output('page-4', 'style')
+    ],
     Input('url', 'pathname')
 )
 def display_page(pathname):
-    link2page = {
-        '/': page0,
-        '/page-1': page1,
-        '/page-2': page2,
-        '/page-3': page3,
-        '/page-4': page4
-    }
-    return link2page.get(pathname, page0)
-
-# Callback to handle loading previous projects
-@app.callback(
-    Output('page-content', 'children', allow_duplicate=True),
-    Input('previous-projects-dropdown', 'value'),
-    prevent_initial_call=True
-)
-def load_project(value):
-    if value == 'proj1':
-        return page1
-    elif value == 'proj2':
-        return page2
-    elif value == 'proj3':
-        return page3
-    return dash.no_update
+    styles = [{'display': 'none'}] * 5
+    if pathname == '/':
+        styles[0] = {'display': 'block'}
+    elif pathname == '/page-1':
+        styles[1] = {'display': 'block'}
+    elif pathname == '/page-2':
+        styles[2] = {'display': 'block'}
+    elif pathname == '/page-3':
+        styles[3] = {'display': 'block'}
+    elif pathname == '/page-4':
+        styles[4] = {'display': 'block'}
+    return styles
 
 @app.callback(
     Output('output-pdf', 'children'),
-    [Input('upload-pdf', 'contents')]
+    Input('upload-pdf', 'contents'),
 )
 def display_pdf(contents):
     if contents is not None:
