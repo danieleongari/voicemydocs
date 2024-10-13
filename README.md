@@ -1,4 +1,4 @@
-# voicemydocs
+# VoiceMyDocs
 
 Convert PDF files to engeging audios, with full control over the whole process.
 
