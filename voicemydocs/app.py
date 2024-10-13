@@ -1,9 +1,15 @@
+import os
 import dash
 import dash_bootstrap_components as dbc
 from dash import html, dcc, Input, Output
 import base64
 import io
 from PyPDF2 import PdfReader
+from dotenv import load_dotenv
+
+# Search for a .env file in the current directory and load api key
+load_dotenv()
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 ################### CONSTANTS & FUNCTIONS #############################################################################
 
@@ -15,7 +21,6 @@ VOICE_OPTIONS = [ # https://platform.openai.com/docs/guides/text-to-speech/quick
     dict(value="nova", label="Nova - girl"),
     dict(value="shimmer", label="Shimmer - woman"),
 ]
-
 
 def extract_text_from_pdf(pdf_data):
     pdf_reader = PdfReader(io.BytesIO(pdf_data))
@@ -267,6 +272,9 @@ def serve_layout():
                 vertical=True,
                 pills=True,
             ),
+            html.Hr(),
+            html.H5("OpenAI API Key"),
+            dbc.Input(id='input-openai-api-key', value=OPENAI_API_KEY, placeholder="Enter API key...", type='password', style={'width': '250px'}),
             html.Hr(),
             html.Div(
                 [

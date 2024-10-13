@@ -7,6 +7,7 @@ setup(
     install_requires=[
         'dash',
         'dash-bootstrap-components',
+        'python-dotenv',
     ],
     extras_require={
         'dev': [
