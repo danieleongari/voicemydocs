@@ -8,6 +8,7 @@ setup(
         'dash',
         'dash-bootstrap-components',
         'python-dotenv',
+        'openai>=1.0',
     ],
     extras_require={
         'dev': [

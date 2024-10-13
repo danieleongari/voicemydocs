@@ -1,11 +1,13 @@
 import os
 import dash
 import dash_bootstrap_components as dbc
-from dash import html, dcc, Input, Output
+from dash import html, dcc, Input, State, Output
 import base64
 import io
 from PyPDF2 import PdfReader
 from dotenv import load_dotenv
+
+from openai import OpenAI 
 
 # Search for a .env file in the current directory and load api key
 load_dotenv()
@@ -15,16 +17,18 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 DEFAULT_SUMMARY_PROMPT = """
 A text extraction from a PDF document is provided. It could be highly unstructured.
-Make a summary of the text highlighting the main points.
+You make a summary of the text highlighting the main points.
 
-Use about 40000 words.
+You just output the summary, without replying to the user.
+
+You use about 40000 words.
 """.strip()
 
 DEFAULT_TRANSCRIPT_PROMPT = """
 A summary of an interesting document is provided. 
-Make the transcript of a conversation between two speakers discussing the main points of the document.
+You make the transcript of a conversation between two speakers discussing the main points of the document.
 
-Just output the conversation between the two speakers using the following format:
+You don't reply to the user, but you just output the conversation between the two speakers using the following format:
 <speaker1>
 text
 <speaker2>
@@ -33,9 +37,16 @@ text
 text
 ...
 
-Use about 20000 words.
+You use about 20000 words.
 
 """.strip()
+
+MODEL_DEFAULT = "gpt-4o-mini"
+
+MODEL_OPTIONS = [
+    "gpt-4o-2024-08-06",
+    "gpt-4o-mini"
+]
 
 VOICE_OPTIONS = [ # https://platform.openai.com/docs/guides/text-to-speech/quickstart
     dict(value="alloy", label="Alloy - pure neutral"),
@@ -55,10 +66,30 @@ def extract_text_from_pdf(pdf_data):
         text += f"\n\n>>>>>>>>>>> End Page {npage} of {npages} <<<<<<<<<<<<<\n\n"
     return text
 
+def call_llm_api(system_content, user_content, model, api_key):
+    client = OpenAI(
+        api_key=OPENAI_API_KEY
+    )
+    
+    completion = client.chat.completions.create(
+        model=model,
+        temperature=1.0,
+        messages=[
+            {"role": "system", "content": system_content}, 
+            {"role": "user", "content": user_content}  
+        ]
+    )
+    
+    output_content = completion.choices[0].message.content
+    
+    return output_content
+
 ################### PAGES ###############################################################################################
 
 page0 = html.Div([
-    html.H1("Welcome to the Dash App")
+    html.H1("Welcome to VoiceMyDocs"),
+    html.P("Folow the steps to convert a document into an audio file."),
+    html.A("Find here the documentation", href="https://docs.google.com/document/d/11uGi8-3JCu3PSPJdwiG-azg6tphVLogrNuRPy4coHo4/edit?usp=sharing", target="_blank"),
 ], id='page-0', style={'display': 'none'})
 
 page1 = html.Div([
@@ -128,21 +159,22 @@ page2 = html.Div([
                         ),
                         dcc.Dropdown(
                             id='dropdown-model-summary',
-                            options=[
-                                "gpt-4o-2024-08-06",
-                                "gpt-4o-mini"
-                            ],
-                            value='gpt-4o-2024-08-06',
+                            options=MODEL_OPTIONS,
+                            value=MODEL_DEFAULT,
                             style={'marginLeft': '10px', 'width': '250px'}
                         ),
                     ],
                     style={'display': 'flex', 'alignItems': 'center'}
                 ),
                 dbc.Button("Generate Transcript", color="primary", className="mr-1", id="button-generate-summary", style={'marginTop': '10px'}),
-                dcc.Textarea(
+                dcc.Loading(
+                    id="loading-summary",
+                    type="circle",
+                    children=dcc.Textarea(
                     id="textarea-summary",
                     style={'width': '100%','height': '300px'},
                     readOnly=True
+                    )
                 ),
             ])
         ])
@@ -180,22 +212,23 @@ page3 = html.Div([
                         ),
                         dcc.Dropdown(
                             id='dropdown-model-transcript',
-                            options=[
-                                "gpt-4o-2024-08-06",
-                                "gpt-4o-mini"
-                            ],
-                            value='gpt-4o-2024-08-06',
+                            options=MODEL_OPTIONS,
+                            value=MODEL_DEFAULT,
                             style={'marginLeft': '10px', 'width': '250px'}
                         ),
                     ],
                     style={'display': 'flex', 'alignItems': 'center'}
                 ),
                 dbc.Button("Generate Transcript", color="primary", className="mr-1", id="button-generate-transcript", style={'marginTop': '10px'}),
-                dcc.Textarea(
-                    id="textarea-transcript",
-                    style={'width': '100%','height': '300px'},
-                    readOnly=True
-                ),
+                dcc.Loading(
+                    id="loading-transcript",
+                    type="circle",
+                    children=dcc.Textarea(
+                        id="textarea-transcript",
+                        style={'width': '100%','height': '300px'},
+                        readOnly=True
+                    ),
+                )
             ])
         ])
 ], id='page-3', style={'display': 'none'})
@@ -386,6 +419,55 @@ def display_pdf(contents):
         return contents, pdf_text, pdf_text
     return dash.no_update
 
+@app.callback(
+    Output('textarea-summary', 'value'),
+    Output('textarea-summary-edit', 'value'),
+    Input('button-generate-summary', 'n_clicks'),
+    State('textarea-file-edit', 'value'),
+    State('textarea-prompt-summary', 'value'),
+    State('dropdown-model-summary', 'value'),
+    State('input-openai-api-key', 'value'),
+    prevent_initial_call=True
+)
+def generate_summary(n_clicks, input_text, prompt, model, api_key):
+    if api_key is None:
+        return "Please enter your OpenAI API Key..."
+    if input_text is None:
+        return "Please upload a document first..."
+    
+    summary_text = call_llm_api(
+        system_content=input_text, 
+        user_content=prompt, 
+        model=model, 
+        api_key=api_key
+    )
+    
+    return summary_text, summary_text
+
+@app.callback(
+    Output('textarea-transcript', 'value'),
+    Output('textarea-transcript-edit', 'value'),
+    Input('button-generate-transcript', 'n_clicks'),
+    State('textarea-summary-edit', 'value'),
+    State('textarea-prompt-transcript', 'value'),
+    State('dropdown-model-transcript', 'value'),
+    State('input-openai-api-key', 'value'),
+    prevent_initial_call=True
+)
+def generate_transcript(n_clicks, input_text, prompt, model, api_key):
+    if api_key is None:
+        return "Please enter your OpenAI API Key..."
+    if input_text is None:
+        return "Please upload a document first..."
+    
+    transcript_text = call_llm_api(
+        system_content=input_text, 
+        user_content=prompt, 
+        model=model, 
+        api_key=api_key
+    )
+    
+    return transcript_text, transcript_text
 
 if __name__ == '__main__':
     app.run_server(debug=True)
