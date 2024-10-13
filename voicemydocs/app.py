@@ -389,7 +389,9 @@ page4 = html.Div(
 
 ################### LAYOUT #############################################################################################
 
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+app = dash.Dash(
+    __name__, external_stylesheets=[dbc.themes.BOOTSTRAP], title="VoiceMyDocs"
+)
 
 
 def serve_layout():
