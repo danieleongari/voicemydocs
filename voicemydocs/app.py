@@ -41,11 +41,35 @@ page1 = html.Div([
         },
         multiple=False
     ),
-    html.Div(id='output-pdf')
+    dbc.Row([
+            dbc.Col(
+                html.Iframe(id="iframe-file", style={'width': '100%', 'height': '600px'}),
+                width=6
+            ),
+            dbc.Col(
+                dcc.Textarea(
+                    id="textarea-file",
+                    style={'width': '100%','height': '600px'},
+                    readOnly=True
+                ),
+                width=6
+            )
+        ])
 ], id='page-1', style={'display': 'none'})
 
 page2 = html.Div([
-    html.H1("Step 2: Summarize")
+    html.H1("Step 2: Summarize"),
+    dbc.Row([
+            dbc.Col(
+                dcc.Textarea(
+                    id="textarea-file-edit",
+                    style={'width': '100%','height': '600px'},
+                    readOnly=True
+                ),
+                width=6
+            )
+        ])
+    
 ], id='page-2', style={'display': 'none'})
 
 page3 = html.Div([
@@ -145,7 +169,8 @@ def display_page(pathname):
     return styles
 
 @app.callback(
-    Output('output-pdf', 'children'),
+    Output('iframe-file', 'src'),
+    Output('textarea-file', 'value'),
     Input('upload-pdf', 'contents'),
 )
 def display_pdf(contents):
@@ -154,20 +179,7 @@ def display_pdf(contents):
         decoded = base64.b64decode(content_string)
         pdf_text = extract_text_from_pdf(decoded)
         
-        return dbc.Row([
-            dbc.Col(
-                html.Iframe(src=contents, style={'width': '100%', 'height': '600px'}),
-                width=6
-            ),
-            dbc.Col(
-                dcc.Textarea(
-                    value=pdf_text,
-                    style={'width': '100%', 'height': '600px'},
-                    readOnly=True
-                ),
-                width=6
-            )
-        ])
+        return contents, pdf_text
     return dash.no_update
 
 
