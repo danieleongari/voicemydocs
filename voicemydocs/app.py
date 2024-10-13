@@ -13,6 +13,30 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 ################### CONSTANTS & FUNCTIONS #############################################################################
 
+DEFAULT_SUMMARY_PROMPT = """
+A text extraction from a PDF document is provided. It could be highly unstructured.
+Make a summary of the text highlighting the main points.
+
+Use about 40000 words.
+""".strip()
+
+DEFAULT_TRANSCRIPT_PROMPT = """
+A summary of an interesting document is provided. 
+Make the transcript of a conversation between two speakers discussing the main points of the document.
+
+Just output the conversation between the two speakers using the following format:
+<speaker1>
+text
+<speaker2>
+text
+<speaker1>
+text
+...
+
+Use about 20000 words.
+
+""".strip()
+
 VOICE_OPTIONS = [ # https://platform.openai.com/docs/guides/text-to-speech/quickstart
     dict(value="alloy", label="Alloy - pure neutral"),
     dict(value="echo", label="Echo - emphatic neutral"),
@@ -89,6 +113,7 @@ page2 = html.Div([
                 html.H5("Prompt for summarization"),
                 dcc.Textarea(
                     id="textarea-prompt-summary",
+                    value=DEFAULT_SUMMARY_PROMPT,
                     style={'width': '100%','height': '200px'},
                     readOnly=False
                 ),
@@ -140,6 +165,7 @@ page3 = html.Div([
                 html.H5("Prompt for transcript"),
                 dcc.Textarea(
                     id="textarea-prompt-transcript",
+                    value=DEFAULT_TRANSCRIPT_PROMPT,
                     style={'width': '100%','height': '200px'},
                     readOnly=False
                 ),
