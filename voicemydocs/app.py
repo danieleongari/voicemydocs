@@ -108,9 +108,10 @@ page2 = html.Div([
                     ],
                     style={'display': 'flex', 'alignItems': 'center'}
                 ),
+                dbc.Button("Generate Transcript", color="primary", className="mr-1", id="button-generate-summary", style={'marginTop': '10px'}),
                 dcc.Textarea(
                     id="textarea-summary",
-                    style={'width': '100%','height': '350px'},
+                    style={'width': '100%','height': '300px'},
                     readOnly=True
                 ),
             ])
@@ -158,9 +159,10 @@ page3 = html.Div([
                     ],
                     style={'display': 'flex', 'alignItems': 'center'}
                 ),
+                dbc.Button("Generate Transcript", color="primary", className="mr-1", id="button-generate-transcript", style={'marginTop': '10px'}),
                 dcc.Textarea(
-                    id="textarea-styling",
-                    style={'width': '100%','height': '350px'},
+                    id="textarea-transcript",
+                    style={'width': '100%','height': '300px'},
                     readOnly=True
                 ),
             ])
@@ -171,7 +173,7 @@ page4 = html.Div([
     html.H1("Step 4: Convert to Audio"),
     dbc.Row([
             dbc.Col([
-                html.H5("Final transcript from Step 3"),
+                html.H5("Transcript from Step 3"),
                 dcc.Textarea(
                     id="textarea-transcript-edit",
                     style={'width': '100%','height': '600px'},
