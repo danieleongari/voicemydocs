@@ -52,7 +52,7 @@ I'm good, thanks! How about you?
 I'm doing great, thanks for asking!
 <speaker2>
 That's good to hear!
-"""
+""".strip()
 
 MODEL_DEFAULT = "gpt-4o-mini"
 
@@ -122,8 +122,8 @@ def dialogue_text2list(dialogue: str) -> list:
 
     # Iterate through the lines
     for line in lines:
-        if line.startswith("<speaker"):
-            current_speaker = int(line.strip("<speaker>"))
+        if line.lower().startswith("<speaker"):
+            current_speaker = int(line.lower().strip("<speaker>"))
         else:
             dialogue_list.append({"speaker": current_speaker, "text": line})
 
@@ -371,7 +371,6 @@ page4 = html.Div(
                         html.H5("Transcript from Step 3"),
                         dcc.Textarea(
                             id="textarea-transcript-edit",
-                            value=DEBUG_DIALOGUE,
                             style={"width": "100%", "height": "600px"},
                             readOnly=False,
                         ),
@@ -500,6 +499,28 @@ def serve_layout():
                 ],
                 vertical=True,
                 pills=True,
+            ),
+            html.Hr(),
+            html.H5("Project Counters"),
+            html.P(
+                id="counter-document",
+                children="Document: 0c 0w 0p",
+                style={"left": "10px", "position": "relative", "margin": "5px"},
+            ),
+            html.P(
+                id="counter-summary",
+                children="Summary: 0c 0w",
+                style={"left": "10px", "position": "relative", "margin": "5px"},
+            ),
+            html.P(
+                id="counter-transcript",
+                children="Transcription: 0c 0w 0d",
+                style={"left": "10px", "position": "relative", "margin": "5px"},
+            ),
+            html.P(
+                id="counter-audio",
+                children="Audio: 0:00s $0.00",
+                style={"left": "10px", "position": "relative", "margin": "5px"},
             ),
             html.Hr(),
             html.H5("OpenAI API Key"),
@@ -682,6 +703,76 @@ def update_audio_player(audio_data_base64):
         audio_src = f"data:audio/mp3;base64,{audio_data_base64}"
         return audio_src
     return None
+
+
+# ### COUNTERS CALLBACKS #########################################################
+# html.P("Summary: 0w 0c", id="counter-summary", style={"left": "10px", "position": "relative", "margin": "5px"}),
+# html.P("Transcr: 0w 0c 0d", id="counter-transcript", style={"left": "10px", "position": "relative", "margin": "5px"}),
+# html.P("Audio:   0:00", id="counter-audio", style={"left": "10px", "position": "relative", "margin": "5px"}),
+
+# id="dropdown-model-tts",
+# options=[
+#     dict(
+#         value="tts-1", label="TTS - $0.15/10k chars"
+#     ),
+#     dict(
+#         value="tts-1-hd",
+#         label="TTS-HD - $0.30/10k chars",
+#     ),
+
+
+@app.callback(
+    Output("counter-document", "children"),
+    Input("textarea-file-edit", "value"),
+    prevent_initial_call=False,
+)
+def update_counter_document(text):
+    if text is None:
+        words = chars = 0
+    else:
+        chars = len(text)
+        words = len(text.split())
+        pages = len([x for x in text.strip().split("End Page") if x])
+    return f"Document: {chars}c {words}w {pages}p"
+
+
+@app.callback(
+    Output("counter-summary", "children"),
+    Input("textarea-summary-edit", "value"),
+    prevent_initial_call=False,
+)
+def update_counter_summary(text):
+    if text is None:
+        words = chars = 0
+    else:
+        chars = len(text)
+        words = len(text.split())
+    return f"Summary: {chars}c {words}w"
+
+
+@app.callback(
+    Output("counter-transcript", "children"),
+    Output("counter-audio", "children"),
+    Input("textarea-transcript-edit", "value"),
+    Input("dropdown-model-tts", "value"),
+)
+def update_counter_transcript(text, tts_model):
+    if text is None:
+        words = chars = dialogues = estimated_audio_seconds = estimated_price = 0
+    else:
+        CHARS2SEC = 1 / 25
+        words = len(text.split())
+        chars = len(text)
+        dialogues = len([x for x in text.strip().split("<speaker") if x])
+        estimated_audio_seconds = int(chars * CHARS2SEC)
+        minutes, seconds = divmod(estimated_audio_seconds, 60)
+        price_per_10k_char = {"tts-1": 0.15, "tts-1-hd": 0.30}[tts_model]
+        estimated_price = chars * price_per_10k_char / 10000
+
+    return [
+        f"Transcription: {chars}c {words}w {dialogues}d",
+        f"Audio:   {minutes:d}:{seconds:02d}s ${estimated_price:.2f}",
+    ]
 
 
 if __name__ == "__main__":
