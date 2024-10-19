@@ -1,13 +1,15 @@
 import os
-import dash
-import dash_bootstrap_components as dbc
-from dash import html, dcc, Input, State, Output
 import base64
 import io
+from datetime import datetime
 from PyPDF2 import PdfReader
-from dotenv import load_dotenv
-
 from openai import OpenAI
+from dotenv import load_dotenv
+import concurrent.futures as cf
+
+import dash
+from dash import html, dcc, Input, State, Output
+import dash_bootstrap_components as dbc
 
 # Search for a .env file in the current directory and load api key
 load_dotenv()
@@ -37,9 +39,20 @@ text
 text
 ...
 
-You use about 20000 words.
+You use about 10000 words.
 
 """.strip()
+
+DEBUG_DIALOGUE = """
+<speaker1>
+Hello, how are you?
+<speaker2>
+I'm good, thanks! How about you?
+<speaker1>
+I'm doing great, thanks for asking!
+<speaker2>
+That's good to hear!
+"""
 
 MODEL_DEFAULT = "gpt-4o-mini"
 
@@ -66,7 +79,7 @@ def extract_text_from_pdf(pdf_data):
 
 
 def call_llm_api(system_content, user_content, model, api_key):
-    client = OpenAI(api_key=OPENAI_API_KEY)
+    client = OpenAI(api_key=api_key)
 
     completion = client.chat.completions.create(
         model=model,
@@ -80,6 +93,80 @@ def call_llm_api(system_content, user_content, model, api_key):
     output_content = completion.choices[0].message.content
 
     return output_content
+
+
+def call_tts_api(text: str, voice: str, tts_model: str, api_key: str) -> bytes:
+    client = OpenAI(api_key=api_key)
+
+    with client.audio.speech.with_streaming_response.create(
+        model=tts_model,
+        voice=voice,
+        input=text,
+    ) as response:
+        with io.BytesIO() as file:
+            for chunk in response.iter_bytes():
+                file.write(chunk)
+            return file.getvalue()  # Mp3
+
+
+def dialogue_text2list(dialogue: str) -> list:
+    """Converts a dialogue string into a list of dictionaries, e.g.,
+    [ {'speaker': 1, 'text': 'Hello, how are you?'},
+    {'speaker': 2, 'text': "I'm good, thanks! How about you?"},
+    ...]
+    """
+
+    lines = [line.strip() for line in dialogue.strip().split("\n") if line.strip()]
+    dialogue_list = []
+    current_speaker = None
+
+    # Iterate through the lines
+    for line in lines:
+        if line.startswith("<speaker"):
+            current_speaker = int(line.strip("<speaker>"))
+        else:
+            dialogue_list.append({"speaker": current_speaker, "text": line})
+
+    return dialogue_list
+
+
+def compile_dialogue(
+    dialogue_text,
+    speakers_voice=["nova", "echo", "onyx"],
+    tts_model="tts-1",
+    api_key=None,
+):
+    """Inspired to PDF2Audio"""
+
+    dialogue_list = dialogue_text2list(dialogue_text)
+
+    audio = b""
+    with cf.ThreadPoolExecutor() as executor:
+        futures = []
+        counter = 0
+        for dialogue_dict in dialogue_list:
+            counter += 1
+            future = executor.submit(
+                call_tts_api,
+                dialogue_dict["text"],
+                speakers_voice[dialogue_dict["speaker"] - 1],
+                tts_model,
+                api_key,
+            )
+            futures.append(future)
+
+        for future in futures:
+            audio_chunk = future.result()
+            audio += audio_chunk
+
+    output_directory = "../.voicemydocs_cache/"
+    audio_filename = f"audio_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp3"
+
+    # os.makedirs(output_directory, exist_ok=True)
+    # with open(output_directory + audio_filename, "wb") as f:
+    #     f.write(audio)
+
+    return output_directory + audio_filename, audio
 
 
 ################### PAGES ###############################################################################################
@@ -284,6 +371,7 @@ page4 = html.Div(
                         html.H5("Transcript from Step 3"),
                         dcc.Textarea(
                             id="textarea-transcript-edit",
+                            value=DEBUG_DIALOGUE,
                             style={"width": "100%", "height": "600px"},
                             readOnly=False,
                         ),
@@ -371,12 +459,11 @@ page4 = html.Div(
                             id="button-tts",
                             style={"marginTop": "20px"},
                         ),
-                        dbc.Button(
-                            "PLACEHOLDER play and download MP3",
-                            color="primary",
-                            className="mr-1",
-                            id="button-tts-placeholder",
-                            style={"marginTop": "20px"},
+                        html.Audio(
+                            id="audio-player",
+                            src="https://www.computerhope.com/jargon/m/example.mp3",
+                            controls=True,
+                            style={"width": "100%", "height": "50px"},
                         ),
                     ]
                 ),
@@ -456,7 +543,10 @@ def serve_layout():
         style={"marginLeft": "300px", "padding": "20px"},
     )
 
-    return dbc.Container([dcc.Location(id="url"), sidebar, content], fluid=True)
+    return dbc.Container(
+        [dcc.Location(id="url"), dcc.Store(id="stored-audio"), sidebar, content],
+        fluid=True,
+    )
 
 
 app.layout = serve_layout
@@ -548,6 +638,50 @@ def generate_transcript(n_clicks, input_text, prompt, model, api_key):
     )
 
     return transcript_text, transcript_text
+
+
+@app.callback(
+    Output("stored-audio", "data"),
+    Input("button-tts", "n_clicks"),
+    State("textarea-transcript-edit", "value"),
+    State("dropdown-speaker1", "value"),
+    State("dropdown-speaker2", "value"),
+    State("dropdown-speaker3", "value"),
+    State("dropdown-model-tts", "value"),
+    State("input-openai-api-key", "value"),
+    prevent_initial_call=True,
+)
+def convert_to_audio(
+    n_clicks, transcript, speaker1, speaker2, speaker3, tts_model, api_key
+):
+    if api_key is None:
+        return "Please enter your OpenAI API Key..."
+    if transcript is None:
+        return "Please generate a transcript first..."
+
+    speakers_voice = [speaker1, speaker2, speaker3]
+    audio_file_path, audio_data = compile_dialogue(
+        transcript, speakers_voice, tts_model, api_key
+    )
+
+    # with open(audio_file_path, "rb") as audio_file:
+    #     audio_data = base64.b64encode(audio_file.read()).decode('utf-8')
+
+    audio_data_base64 = base64.b64encode(audio_data).decode("utf-8")
+
+    return audio_data_base64
+
+
+@app.callback(
+    Output("audio-player", "src"),
+    Input("stored-audio", "data"),
+    prevent_initial_call=True,
+)
+def update_audio_player(audio_data_base64):
+    if audio_data_base64:
+        audio_src = f"data:audio/mp3;base64,{audio_data_base64}"
+        return audio_src
+    return None
 
 
 if __name__ == "__main__":
