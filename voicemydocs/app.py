@@ -1,6 +1,7 @@
 import os
 import base64
 import io
+import json
 from datetime import datetime
 from PyPDF2 import PdfReader
 from openai import OpenAI
@@ -707,14 +708,58 @@ def download_file(filename):
     return send_from_directory(CACHE_DIRECTORY, filename)
 
 
-# callback to store the audio file in CACHE_DIRECTORY as soon as stored-auio is updated
+def get_log_dict(*args):
+    keys = [
+        "file-text",
+        "summary-prompt",
+        "summary-model",
+        "summary-text",
+        "transcript-prompt",
+        "transcript-model",
+        "transcript-text",
+        "tts-model",
+        "speaker1",
+        "speaker2",
+        "speaker3",
+        "counter-document",
+        "counter-summary",
+        "counter-transcript",
+        "counter-audio",
+    ]
+
+    args = list(args)
+    iarg_file_text = keys.index("transcript-text")
+    args[iarg_file_text] = dialogue_text2list(args[iarg_file_text])
+
+    return dict(zip(keys, args))
+
+
 @app.callback(
     Output("button-tts", "children"),  # dummy
     Input("stored-audio", "data"),
-    # State("textarea-transcript-edit", "value"),
+    State("textarea-file-edit", "value"),
+    State("textarea-prompt-summary", "value"),
+    State("dropdown-model-summary", "value"),
+    State("textarea-summary-edit", "value"),
+    State("textarea-prompt-transcript", "value"),
+    State("dropdown-model-transcript", "value"),
+    State("textarea-transcript-edit", "value"),
+    State("dropdown-model-tts", "value"),
+    State("dropdown-speaker1", "value"),
+    State("dropdown-speaker2", "value"),
+    State("dropdown-speaker3", "value"),
+    State("counter-document", "children"),
+    State("counter-summary", "children"),
+    State("counter-transcript", "children"),
+    State("counter-audio", "children"),
     prevent_initial_call=True,
 )
-def store_audio(audio_data_base64):
+def store_audio_adn_draft(audio_data_base64, *args):
+    """When the audio is generated, store the mp3 file and the draft (with all the text, prompt and settings used)
+    as CACHE_DIRECTORY/filename.mp3 and .json, respectively.
+    These files will be subsequently available as "Previous Projects" to be reloaded and edited.
+    """
+
     if audio_data_base64 is None:
         return dash.no_update
 
@@ -725,6 +770,12 @@ def store_audio(audio_data_base64):
 
     with open(audio_file_path, "wb") as audio_file:
         audio_file.write(audio_data)
+
+    draft_dict = get_log_dict(*args)
+    draft_file_path = os.path.join(CACHE_DIRECTORY, f"{filename}.json")
+
+    with open(draft_file_path, "w") as draft_file:
+        json.dump(draft_dict, draft_file, indent=4)
 
     return dash.no_update
 
@@ -783,7 +834,7 @@ def update_counter_transcript(text, tts_model):
     if text is None:
         words = chars = dialogues = estimated_audio_seconds = estimated_price = 0
     else:
-        CHARS2SEC = 1 / 25
+        CHARS2SEC = 1 / 20  # This is a rough estimate - TODO: improve
         words = len(text.split())
         chars = len(text)
         dialogues = len([x for x in text.strip().split("<speaker") if x])
