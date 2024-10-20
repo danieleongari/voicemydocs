@@ -19,16 +19,24 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 DEFAULT_SUMMARY_PROMPT = """
 A text extraction from a PDF document is provided. It could be highly unstructured.
-You make a summary of the text highlighting the main points.
-
-You just output the summary, without replying to the user.
-
-You use about 40000 words.
+You rewrite the document in a more structured way, highlighting the main points.
+In particular you want to highlight:
+* Who are the authors of the document, and what is their expertise
+* A general context of the study
+* The techniques used, going into the details as you were speaking to an expert in the field
+* the results they got, without any speculation: just the facts
+* the importance of the results that they got in a broader context 
+* the limits of their tecniques and analysis, and some skeptical considerations
+Your output is a very long text where all the informations that were present in the original document are present.
+You just output the output report, without replying to the user.
 """.strip()
 
 DEFAULT_TRANSCRIPT_PROMPT = """
-A summary of an interesting document is provided. 
+A text summarization of a document is provided.
 You make the transcript of a conversation between two speakers discussing the main points of the document.
+They are both experts in the field, and they try to address a more general, but phd-level audience.
+The two speakers interact with each other, in a very engaging way for the listener.
+They go through all the information contained in the document, making long and detailled speeches.
 
 You don't reply to the user, but you just output the conversation between the two speakers using the following format:
 <speaker1>
@@ -39,7 +47,7 @@ text
 text
 ...
 
-You use about 10000 words.
+The conversation is long, and the speaker cover all the information contained in the document.
 
 """.strip()
 
@@ -706,19 +714,6 @@ def update_audio_player(audio_data_base64):
 
 
 # ### COUNTERS CALLBACKS #########################################################
-# html.P("Summary: 0w 0c", id="counter-summary", style={"left": "10px", "position": "relative", "margin": "5px"}),
-# html.P("Transcr: 0w 0c 0d", id="counter-transcript", style={"left": "10px", "position": "relative", "margin": "5px"}),
-# html.P("Audio:   0:00", id="counter-audio", style={"left": "10px", "position": "relative", "margin": "5px"}),
-
-# id="dropdown-model-tts",
-# options=[
-#     dict(
-#         value="tts-1", label="TTS - $0.15/10k chars"
-#     ),
-#     dict(
-#         value="tts-1-hd",
-#         label="TTS-HD - $0.30/10k chars",
-#     ),
 
 
 @app.callback(
@@ -732,7 +727,7 @@ def update_counter_document(text):
     else:
         chars = len(text)
         words = len(text.split())
-        pages = len([x for x in text.strip().split("End Page") if x])
+        pages = len([x for x in text.strip().split(">>>>>>>>>>> End Page") if x])
     return f"Document: {chars}c {words}w {pages}p"
 
 
@@ -765,9 +760,10 @@ def update_counter_transcript(text, tts_model):
         chars = len(text)
         dialogues = len([x for x in text.strip().split("<speaker") if x])
         estimated_audio_seconds = int(chars * CHARS2SEC)
-        minutes, seconds = divmod(estimated_audio_seconds, 60)
         price_per_10k_char = {"tts-1": 0.15, "tts-1-hd": 0.30}[tts_model]
         estimated_price = chars * price_per_10k_char / 10000
+
+    minutes, seconds = divmod(estimated_audio_seconds, 60)
 
     return [
         f"Transcription: {chars}c {words}w {dialogues}d",
