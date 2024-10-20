@@ -11,11 +11,19 @@ import dash
 from dash import html, dcc, Input, State, Output
 import dash_bootstrap_components as dbc
 
+from flask import Flask, send_from_directory
+
 # Search for a .env file in the current directory and load api key
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 ################### CONSTANTS & FUNCTIONS #############################################################################
+
+CACHE_DIRECTORY = os.path.join(
+    os.path.dirname(os.path.dirname(__file__)), ".voicemydocs_cache/"
+)
+os.makedirs(CACHE_DIRECTORY, exist_ok=True)
+print(f"CACHE_DIRECTORY={CACHE_DIRECTORY}")
 
 DEFAULT_SUMMARY_PROMPT = """
 A text extraction from a PDF document is provided. It could be highly unstructured.
@@ -167,14 +175,7 @@ def compile_dialogue(
             audio_chunk = future.result()
             audio += audio_chunk
 
-    output_directory = "../.voicemydocs_cache/"
-    audio_filename = f"audio_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp3"
-
-    # os.makedirs(output_directory, exist_ok=True)
-    # with open(output_directory + audio_filename, "wb") as f:
-    #     f.write(audio)
-
-    return output_directory + audio_filename, audio
+    return audio
 
 
 ################### PAGES ###############################################################################################
@@ -379,6 +380,7 @@ page4 = html.Div(
                         html.H5("Transcript from Step 3"),
                         dcc.Textarea(
                             id="textarea-transcript-edit",
+                            value=DEBUG_DIALOGUE,
                             style={"width": "100%", "height": "600px"},
                             readOnly=False,
                         ),
@@ -483,8 +485,12 @@ page4 = html.Div(
 
 ################### LAYOUT #############################################################################################
 
+server = Flask(__name__)
 app = dash.Dash(
-    __name__, external_stylesheets=[dbc.themes.BOOTSTRAP], title="VoiceMyDocs"
+    __name__,
+    external_stylesheets=[dbc.themes.BOOTSTRAP],
+    title="VoiceMyDocs",
+    server=server,
 )
 
 
@@ -680,7 +686,7 @@ def generate_transcript(n_clicks, input_text, prompt, model, api_key):
     State("input-openai-api-key", "value"),
     prevent_initial_call=True,
 )
-def convert_to_audio(
+def convert_to_audio_and_save_files(
     n_clicks, transcript, speaker1, speaker2, speaker3, tts_model, api_key
 ):
     if api_key is None:
@@ -689,16 +695,38 @@ def convert_to_audio(
         return "Please generate a transcript first..."
 
     speakers_voice = [speaker1, speaker2, speaker3]
-    audio_file_path, audio_data = compile_dialogue(
-        transcript, speakers_voice, tts_model, api_key
-    )
-
-    # with open(audio_file_path, "rb") as audio_file:
-    #     audio_data = base64.b64encode(audio_file.read()).decode('utf-8')
+    audio_data = compile_dialogue(transcript, speakers_voice, tts_model, api_key)
 
     audio_data_base64 = base64.b64encode(audio_data).decode("utf-8")
 
     return audio_data_base64
+
+
+@server.route("/.voicemydocs_cache/<path:filename>")
+def download_file(filename):
+    return send_from_directory(CACHE_DIRECTORY, filename)
+
+
+# callback to store the audio file in CACHE_DIRECTORY as soon as stored-auio is updated
+@app.callback(
+    Output("button-tts", "children"),  # dummy
+    Input("stored-audio", "data"),
+    # State("textarea-transcript-edit", "value"),
+    prevent_initial_call=True,
+)
+def store_audio(audio_data_base64):
+    if audio_data_base64 is None:
+        return dash.no_update
+
+    audio_data = base64.b64decode(audio_data_base64)
+
+    filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    audio_file_path = os.path.join(CACHE_DIRECTORY, f"{filename}.mp3")
+
+    with open(audio_file_path, "wb") as audio_file:
+        audio_file.write(audio_data)
+
+    return dash.no_update
 
 
 @app.callback(

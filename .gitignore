@@ -5,3 +5,4 @@ venv/
 .env/
 .dev/
 .DS_Store
+.voicemydocs_cache/
