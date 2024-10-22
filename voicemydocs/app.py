@@ -24,7 +24,6 @@ CACHE_DIRECTORY = os.path.join(
     os.path.dirname(os.path.dirname(__file__)), ".voicemydocs_cache/"
 )
 os.makedirs(CACHE_DIRECTORY, exist_ok=True)
-print(f"CACHE_DIRECTORY={CACHE_DIRECTORY}")
 
 DEFAULT_SUMMARY_PROMPT = """
 A text extraction from a PDF document is provided. It could be highly unstructured.
@@ -78,7 +77,7 @@ MODEL_OPTIONS = ["gpt-4o-2024-08-06", "gpt-4o-mini"]
 VOICE_OPTIONS = [  # https://platform.openai.com/docs/guides/text-to-speech/quickstart
     dict(value="alloy", label="Alloy - pure neutral"),
     dict(value="echo", label="Echo - emphatic neutral"),
-    dict(value="faible", label="Faible - emphatic neutral"),
+    dict(value="fable", label="Fable - emphatic neutral"),
     dict(value="onyx", label="Onyx - man"),
     dict(value="nova", label="Nova - girl"),
     dict(value="shimmer", label="Shimmer - woman"),
@@ -190,6 +189,24 @@ page0 = html.Div(
             href="https://docs.google.com/document/d/11uGi8-3JCu3PSPJdwiG-azg6tphVLogrNuRPy4coHo4/edit?usp=sharing",
             target="_blank",
         ),
+        html.Div(style={"height": "30px"}),
+        html.H5("Insert your API Keys"),
+        html.P("OpenAI API Key", style={"marginTop": "10px", "marginBottom": "0px"}),
+        dbc.Input(
+            id="input-openai-api-key",
+            value=OPENAI_API_KEY,
+            placeholder="Enter API key...",
+            type="password",
+            style={"width": "250px"},
+        ),
+        html.P("Anthropic API Key", style={"marginTop": "10px", "marginBottom": "0px"}),
+        dbc.Input(
+            id="input-anthropic-api-key",
+            value=None,
+            placeholder="Enter API key...",
+            type="password",
+            style={"width": "250px"},
+        ),
     ],
     id="page-0",
     style={"display": "none"},
@@ -273,6 +290,7 @@ page2 = html.Div(
                                     id="dropdown-model-summary",
                                     options=MODEL_OPTIONS,
                                     value=MODEL_DEFAULT,
+                                    clearable=False,
                                     style={"marginLeft": "10px", "width": "250px"},
                                 ),
                             ],
@@ -341,6 +359,7 @@ page3 = html.Div(
                                     id="dropdown-model-transcript",
                                     options=MODEL_OPTIONS,
                                     value=MODEL_DEFAULT,
+                                    clearable=False,
                                     style={"marginLeft": "10px", "width": "250px"},
                                 ),
                             ],
@@ -405,6 +424,7 @@ page4 = html.Div(
                                         ),
                                     ],
                                     value="tts-1",
+                                    clearable=False,
                                     style={"marginLeft": "10px", "width": "300px"},
                                 ),
                             ],
@@ -433,6 +453,7 @@ page4 = html.Div(
                                     id="dropdown-speaker1",
                                     options=VOICE_OPTIONS,
                                     value="nova",
+                                    clearable=False,
                                     style={"marginLeft": "10px", "width": "300px"},
                                 ),
                             ],
@@ -445,6 +466,7 @@ page4 = html.Div(
                                     id="dropdown-speaker2",
                                     options=VOICE_OPTIONS,
                                     value="echo",
+                                    clearable=False,
                                     style={"marginLeft": "10px", "width": "300px"},
                                 ),
                             ],
@@ -457,6 +479,7 @@ page4 = html.Div(
                                     id="dropdown-speaker3",
                                     options=VOICE_OPTIONS,
                                     value="onyx",
+                                    clearable=False,
                                     style={"marginLeft": "10px", "width": "300px"},
                                 ),
                             ],
@@ -538,29 +561,11 @@ def serve_layout():
                 style={"left": "10px", "position": "relative", "margin": "5px"},
             ),
             html.Hr(),
-            html.H5("OpenAI API Key"),
-            dbc.Input(
-                id="input-openai-api-key",
-                value=OPENAI_API_KEY,
-                placeholder="Enter API key...",
-                type="password",
-                style={"width": "250px"},
-            ),
-            html.Hr(),
-            html.Div(
-                [
-                    html.H5("Previous Projects"),
-                    dcc.Dropdown(
-                        id="previous-projects-dropdown",
-                        options=[
-                            {"label": "Project 1", "value": "proj1"},
-                            {"label": "Project 2", "value": "proj2"},
-                            {"label": "Project 3", "value": "proj3"},
-                        ],
-                        placeholder="Load a project",
-                    ),
-                ],
-                style={"marginTop": "20px"},
+            html.H5("Previous Projects", id="previous-projects-title"),
+            dcc.Dropdown(
+                id="dropdown-previous-projects",
+                placeholder="Load a past project...",
+                maxHeight=70,
             ),
         ],
         width=3,
@@ -735,7 +740,7 @@ def get_log_dict(*args):
 
 
 @app.callback(
-    Output("button-tts", "children"),  # dummy
+    Output("previous-projects-title", "children", allow_duplicate=True),  # dummy
     Input("stored-audio", "data"),
     State("textarea-file-edit", "value"),
     State("textarea-prompt-summary", "value"),
@@ -754,7 +759,7 @@ def get_log_dict(*args):
     State("counter-audio", "children"),
     prevent_initial_call=True,
 )
-def store_audio_adn_draft(audio_data_base64, *args):
+def store_audio_and_draft(audio_data_base64, *args):
     """When the audio is generated, store the mp3 file and the draft (with all the text, prompt and settings used)
     as CACHE_DIRECTORY/filename.mp3 and .json, respectively.
     These files will be subsequently available as "Previous Projects" to be reloaded and edited.
@@ -777,7 +782,7 @@ def store_audio_adn_draft(audio_data_base64, *args):
     with open(draft_file_path, "w") as draft_file:
         json.dump(draft_dict, draft_file, indent=4)
 
-    return dash.no_update
+    return "Previous Projects..."
 
 
 @app.callback(
@@ -792,7 +797,97 @@ def update_audio_player(audio_data_base64):
     return None
 
 
-# ### COUNTERS CALLBACKS #########################################################
+@app.callback(
+    Output("dropdown-previous-projects", "options"),
+    Output("previous-projects-title", "children"),
+    Input("previous-projects-title", "children"),
+)
+def load_previous_projects(dummy):
+    """Load the list of previous projects from the CACHE_DIRECTORY and return the list of filenames."""
+    files = os.listdir(CACHE_DIRECTORY)
+    filenames_valid = [
+        f.split(".")[0]
+        for f in files
+        if f.endswith(".mp3") and f"{f[:-4]}.json" in files
+    ]
+    filenames_valid.sort(reverse=True)  # sort from most recent to oldest
+    return filenames_valid, f"Previous Projects ({len(filenames_valid)})"
+
+
+def transcript_dict2text(transcript_dict):
+    """Converts a list of dictionaries into a dialogue string, e.g.,
+    ---
+    [ {'speaker': 1, 'text': 'Hello, how are you?'},
+    {'speaker': 2, 'text': "I'm good, thanks! How about you?"},
+    ...]
+    ---
+    <speaker1>
+    Hello, how are you?
+    <speaker2>
+    I'm good, thanks! How about you?
+    """
+
+    lines = []
+    for dialogue_dict in transcript_dict:
+        lines.append(f"<speaker{dialogue_dict['speaker']}>\n{dialogue_dict['text']}")
+
+    return "\n".join(lines)
+
+
+@app.callback(
+    Output("textarea-file-edit", "value", allow_duplicate=True),
+    Output("textarea-prompt-summary", "value", allow_duplicate=True),
+    Output("dropdown-model-summary", "value", allow_duplicate=True),
+    Output("textarea-summary-edit", "value", allow_duplicate=True),
+    Output("textarea-prompt-transcript", "value", allow_duplicate=True),
+    Output("dropdown-model-transcript", "value", allow_duplicate=True),
+    Output("textarea-transcript-edit", "value", allow_duplicate=True),
+    Output("dropdown-model-tts", "value", allow_duplicate=True),
+    Output("dropdown-speaker1", "value", allow_duplicate=True),
+    Output("dropdown-speaker2", "value", allow_duplicate=True),
+    Output("dropdown-speaker3", "value", allow_duplicate=True),
+    Output("audio-player", "src", allow_duplicate=True),
+    Input("dropdown-previous-projects", "value"),
+    prevent_initial_call=True,
+)
+def load_previous_project(filename):
+    """Load the data from the selected project and return the values to the corresponding components.
+    Assuming that the order of the output is the same as the order of the json keys,
+    excluding the counters that are in the last positions.
+    """
+    if filename is None:
+        return [  # default values
+            None,
+            DEFAULT_SUMMARY_PROMPT,
+            MODEL_DEFAULT,
+            None,
+            DEFAULT_TRANSCRIPT_PROMPT,
+            MODEL_DEFAULT,
+            None,
+            "tts-1",
+            "nova",
+            "echo",
+            "onyx",
+            "https://www.computerhope.com/jargon/m/example.mp3",
+        ]
+
+    draft_file_path = os.path.join(CACHE_DIRECTORY, f"{filename}.json")
+    with open(draft_file_path, "r") as draft_file:
+        draft_dict = json.load(draft_file)
+
+    draft_dict["transcript-text"] = transcript_dict2text(draft_dict["transcript-text"])
+
+    # load mp3 file
+    audio_file_path = os.path.join(CACHE_DIRECTORY, f"{filename}.mp3")
+    with open(audio_file_path, "rb") as audio_file:
+        audio_data = audio_file.read()
+        audio_data_base64 = base64.b64encode(audio_data).decode("utf-8")
+        audio_src = f"data:audio/mp3;base64,{audio_data_base64}"
+
+    return list(draft_dict.values())[:11] + [audio_src]
+
+
+#### COUNTERS CALLBACKS #########################################################
 
 
 @app.callback(
@@ -802,7 +897,7 @@ def update_audio_player(audio_data_base64):
 )
 def update_counter_document(text):
     if text is None:
-        words = chars = 0
+        words = chars = pages = 0
     else:
         chars = len(text)
         words = len(text.split())
