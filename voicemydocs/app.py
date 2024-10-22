@@ -83,6 +83,16 @@ VOICE_OPTIONS = [  # https://platform.openai.com/docs/guides/text-to-speech/quic
     dict(value="shimmer", label="Shimmer - woman"),
 ]
 
+with open(
+    os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "assets/showcase_tts_6voices.mp3"
+    ),
+    "rb",
+) as audio_file:
+    DEFAULT_AUDIO_SRC = "data:audio/mp3;base64," + base64.b64encode(
+        audio_file.read()
+    ).decode("utf-8")
+
 
 def extract_text_from_pdf(pdf_data):
     pdf_reader = PdfReader(io.BytesIO(pdf_data))
@@ -400,7 +410,7 @@ page4 = html.Div(
                         html.H5("Transcript from Step 3"),
                         dcc.Textarea(
                             id="textarea-transcript-edit",
-                            value=DEBUG_DIALOGUE,
+                            value=None,
                             style={"width": "100%", "height": "600px"},
                             readOnly=False,
                         ),
@@ -494,7 +504,7 @@ page4 = html.Div(
                         ),
                         html.Audio(
                             id="audio-player",
-                            src="https://www.computerhope.com/jargon/m/example.mp3",
+                            src=DEFAULT_AUDIO_SRC,
                             controls=True,
                             style={"width": "100%", "height": "50px"},
                         ),
@@ -868,7 +878,7 @@ def load_previous_project(filename):
             "nova",
             "echo",
             "onyx",
-            "https://www.computerhope.com/jargon/m/example.mp3",
+            DEFAULT_AUDIO_SRC,
         ]
 
     draft_file_path = os.path.join(CACHE_DIRECTORY, f"{filename}.json")
