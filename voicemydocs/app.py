@@ -502,11 +502,15 @@ page4 = html.Div(
                             id="button-tts",
                             style={"marginTop": "20px"},
                         ),
-                        html.Audio(
-                            id="audio-player",
-                            src=DEFAULT_AUDIO_SRC,
-                            controls=True,
-                            style={"width": "100%", "height": "50px"},
+                        dcc.Loading(
+                            id="loading-audio",
+                            type="circle",
+                            children=html.Audio(
+                                id="audio-player",
+                                src=DEFAULT_AUDIO_SRC,
+                                controls=True,
+                                style={"width": "100%", "height": "50px"},
+                            ),
                         ),
                     ]
                 ),
@@ -693,6 +697,7 @@ def generate_transcript(n_clicks, input_text, prompt, model, api_key):
 
 @app.callback(
     Output("stored-audio", "data"),
+    Output("audio-player", "src"),
     Input("button-tts", "n_clicks"),
     State("textarea-transcript-edit", "value"),
     State("dropdown-speaker1", "value"),
@@ -702,7 +707,7 @@ def generate_transcript(n_clicks, input_text, prompt, model, api_key):
     State("input-openai-api-key", "value"),
     prevent_initial_call=True,
 )
-def convert_to_audio_and_save_files(
+def text2audio_store_play(
     n_clicks, transcript, speaker1, speaker2, speaker3, tts_model, api_key
 ):
     if api_key is None:
@@ -715,7 +720,7 @@ def convert_to_audio_and_save_files(
 
     audio_data_base64 = base64.b64encode(audio_data).decode("utf-8")
 
-    return audio_data_base64
+    return audio_data_base64, f"data:audio/mp3;base64,{audio_data_base64}"
 
 
 @server.route("/.voicemydocs_cache/<path:filename>")
@@ -769,7 +774,7 @@ def get_log_dict(*args):
     State("counter-audio", "children"),
     prevent_initial_call=True,
 )
-def store_audio_and_draft(audio_data_base64, *args):
+def write_checkpoint(audio_data_base64, *args):
     """When the audio is generated, store the mp3 file and the draft (with all the text, prompt and settings used)
     as CACHE_DIRECTORY/filename.mp3 and .json, respectively.
     These files will be subsequently available as "Previous Projects" to be reloaded and edited.
@@ -793,18 +798,6 @@ def store_audio_and_draft(audio_data_base64, *args):
         json.dump(draft_dict, draft_file, indent=4)
 
     return "Previous Projects..."
-
-
-@app.callback(
-    Output("audio-player", "src"),
-    Input("stored-audio", "data"),
-    prevent_initial_call=True,
-)
-def update_audio_player(audio_data_base64):
-    if audio_data_base64:
-        audio_src = f"data:audio/mp3;base64,{audio_data_base64}"
-        return audio_src
-    return None
 
 
 @app.callback(
