@@ -5,6 +5,7 @@ import json
 from datetime import datetime
 from PyPDF2 import PdfReader
 from openai import OpenAI
+from anthropic import Anthropic
 from dotenv import load_dotenv
 import concurrent.futures as cf
 
@@ -17,6 +18,7 @@ from flask import Flask, send_from_directory
 # Search for a .env file in the current directory and load api key
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 
 ################### CONSTANTS & FUNCTIONS #############################################################################
 
@@ -72,7 +74,14 @@ That's good to hear!
 
 MODEL_DEFAULT = "gpt-4o-mini"
 
-MODEL_OPTIONS = ["gpt-4o-2024-08-06", "gpt-4o-mini"]
+MODEL_OPTIONS = [
+    "gpt-4o-2024-08-06",
+    "gpt-4o-mini",
+    "claude-3-5-sonnet-20241022",
+    "claude-3-opus-20240229",
+    "claude-3-sonnet-20240229",
+    "claude-3-haiku-20240307",
+]
 
 VOICE_OPTIONS = [  # https://platform.openai.com/docs/guides/text-to-speech/quickstart
     dict(value="alloy", label="Alloy - pure neutral"),
@@ -104,19 +113,44 @@ def extract_text_from_pdf(pdf_data):
     return text
 
 
-def call_llm_api(system_content, user_content, model, api_key):
-    client = OpenAI(api_key=api_key)
+def call_llm_api(system_content, user_content, model, api_keys):
+    """Working for both OpenAI and Anthropic API.
+    api_keys is a dictionary with the keys 'openai' and 'anthropic'.
+    """
+    if model.startswith("gpt"):
+        if not api_keys["openai"]:
+            return "Please insert your OpenAI API Key first..."
 
-    completion = client.chat.completions.create(
-        model=model,
-        temperature=1.0,
-        messages=[
-            {"role": "system", "content": system_content},
-            {"role": "user", "content": user_content},
-        ],
-    )
+        client = OpenAI(api_key=api_keys["openai"])
 
-    output_content = completion.choices[0].message.content
+        completion = client.chat.completions.create(
+            model=model,
+            temperature=1.0,
+            messages=[
+                {"role": "system", "content": system_content},
+                {"role": "user", "content": user_content},
+            ],
+        )
+
+        output_content = completion.choices[0].message.content
+
+    else:  # model.startswith("claude")
+        if not api_keys["anthropic"]:
+            return "Please insert your Anthropic API Key first..."
+
+        client = Anthropic(api_key=api_keys["anthropic"])
+
+        messages = client.messages.create(
+            model=model,
+            temperature=1.0,
+            max_tokens=8192 if "claude-3-5" in model else 4096,
+            system=system_content,
+            messages=[
+                {"role": "user", "content": [{"type": "text", "text": user_content}]}
+            ],
+        )
+
+        output_content = messages.content[0].text
 
     return output_content
 
@@ -212,7 +246,7 @@ page0 = html.Div(
         html.P("Anthropic API Key", style={"marginTop": "10px", "marginBottom": "0px"}),
         dbc.Input(
             id="input-anthropic-api-key",
-            value=None,
+            value=ANTHROPIC_API_KEY,
             placeholder="Enter API key...",
             type="password",
             style={"width": "250px"},
@@ -657,16 +691,18 @@ def display_pdf(contents):
     State("textarea-prompt-summary", "value"),
     State("dropdown-model-summary", "value"),
     State("input-openai-api-key", "value"),
+    State("input-anthropic-api-key", "value"),
     prevent_initial_call=True,
 )
-def generate_summary(n_clicks, input_text, prompt, model, api_key):
-    if api_key is None:
-        return "Please enter your OpenAI API Key..."
+def generate_summary(n_clicks, input_text, prompt, model, openai_key, anthropic_key):
     if input_text is None:
         return "Please upload a document first..."
 
     summary_text = call_llm_api(
-        system_content=input_text, user_content=prompt, model=model, api_key=api_key
+        system_content=input_text,
+        user_content=prompt,
+        model=model,
+        api_keys={"openai": openai_key, "anthropic": anthropic_key},
     )
 
     return summary_text, summary_text
@@ -680,16 +716,18 @@ def generate_summary(n_clicks, input_text, prompt, model, api_key):
     State("textarea-prompt-transcript", "value"),
     State("dropdown-model-transcript", "value"),
     State("input-openai-api-key", "value"),
+    State("input-anthropic-api-key", "value"),
     prevent_initial_call=True,
 )
-def generate_transcript(n_clicks, input_text, prompt, model, api_key):
-    if api_key is None:
-        return "Please enter your OpenAI API Key..."
+def generate_transcript(n_clicks, input_text, prompt, model, openai_key, anthropic_key):
     if input_text is None:
         return "Please upload a document first..."
 
     transcript_text = call_llm_api(
-        system_content=input_text, user_content=prompt, model=model, api_key=api_key
+        system_content=input_text,
+        user_content=prompt,
+        model=model,
+        api_keys={"openai": openai_key, "anthropic": anthropic_key},
     )
 
     return transcript_text, transcript_text

@@ -9,6 +9,7 @@ setup(
         "dash-bootstrap-components",
         "python-dotenv",
         "openai>=1.0",
+        "anthropic",
     ],
     extras_require={
         "dev": [
