@@ -699,8 +699,8 @@ def generate_summary(n_clicks, input_text, prompt, model, openai_key, anthropic_
         return "Please upload a document first..."
 
     summary_text = call_llm_api(
-        system_content=input_text,
-        user_content=prompt,
+        system_content=prompt,
+        user_content=input_text,
         model=model,
         api_keys={"openai": openai_key, "anthropic": anthropic_key},
     )
@@ -724,8 +724,8 @@ def generate_transcript(n_clicks, input_text, prompt, model, openai_key, anthrop
         return "Please upload a document first..."
 
     transcript_text = call_llm_api(
-        system_content=input_text,
-        user_content=prompt,
+        system_content=prompt,
+        user_content=input_text,
         model=model,
         api_keys={"openai": openai_key, "anthropic": anthropic_key},
     )
