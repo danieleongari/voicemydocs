@@ -341,7 +341,7 @@ page2 = html.Div(
                             style={"display": "flex", "alignItems": "center"},
                         ),
                         dbc.Button(
-                            "Generate Transcript",
+                            "Generate Summary",
                             color="primary",
                             className="mr-1",
                             id="button-generate-summary",
