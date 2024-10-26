@@ -296,7 +296,13 @@ page1 = html.Div(
             [
                 dbc.Col(
                     html.Iframe(
-                        id="iframe-file", style={"width": "100%", "height": "600px"}
+                        id="iframe-file",
+                        src="/assets/pdf-placeholder.svg",
+                        style={
+                            "width": "100%",
+                            "height": "600px",
+                            "border": "none",
+                        },
                     ),
                     width=6,
                 ),
@@ -727,7 +733,7 @@ def display_pdf(contents):
         pdf_text = extract_text_from_pdf(decoded)
 
         return contents, pdf_text, pdf_text
-    return dash.no_update
+    return "/assets/pdf-placeholder.svg", None, None
 
 
 @app.callback(
