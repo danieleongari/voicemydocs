@@ -236,20 +236,39 @@ page0 = html.Div(
         html.Div(style={"height": "30px"}),
         html.H5("Insert your API Keys"),
         html.P("OpenAI API Key", style={"marginTop": "10px", "marginBottom": "0px"}),
-        dbc.Input(
-            id="input-openai-api-key",
-            value=OPENAI_API_KEY,
-            placeholder="Enter API key...",
-            type="password",
-            style={"width": "250px"},
+        dbc.InputGroup(
+            [
+                dbc.Button(
+                    "👁️",
+                    id="toggle-password-openai",
+                    n_clicks=0,
+                    style={"width": "40px"},
+                ),
+                dbc.Input(
+                    id="input-openai-api-key",
+                    type="password",
+                    placeholder="Enter API key...",
+                    value=OPENAI_API_KEY,
+                ),
+            ]
         ),
         html.P("Anthropic API Key", style={"marginTop": "10px", "marginBottom": "0px"}),
-        dbc.Input(
-            id="input-anthropic-api-key",
-            value=ANTHROPIC_API_KEY,
-            placeholder="Enter API key...",
-            type="password",
-            style={"width": "250px"},
+        dbc.InputGroup(
+            [
+                dbc.Button(
+                    "👁️",
+                    id="toggle-password-anthropic",
+                    n_clicks=0,
+                    style={"width": "40px"},
+                ),
+                dbc.Input(
+                    id="input-anthropic-api-key",
+                    value=ANTHROPIC_API_KEY,
+                    placeholder="Enter API key...",
+                    type="password",
+                    style={"width": "250px"},
+                ),
+            ]
         ),
     ],
     id="page-0",
@@ -665,6 +684,26 @@ def display_page(pathname):
     elif pathname == "/page-4":
         styles[4] = {"display": "block"}
     return styles
+
+
+@app.callback(
+    Output("input-openai-api-key", "type"),
+    Input("toggle-password-openai", "n_clicks"),
+)
+def toggle_openai_password_visibility(n_clicks):
+    if n_clicks and n_clicks % 2 == 1:
+        return "text"
+    return "password"
+
+
+@app.callback(
+    Output("input-anthropic-api-key", "type"),
+    Input("toggle-password-anthropic", "n_clicks"),
+)
+def toggle_anthropic_password_visibility(n_clicks):
+    if n_clicks and n_clicks % 2 == 1:
+        return "text"
+    return "password"
 
 
 @app.callback(
