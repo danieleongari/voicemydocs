@@ -607,32 +607,40 @@ def serve_layout():
             ),
             html.Hr(),
             html.H5("Project Counters"),
-            html.P(
+            html.Small(
                 id="counter-document",
                 children="Document: 0c 0w 0p",
                 style={"left": "10px", "position": "relative", "margin": "5px"},
             ),
-            html.P(
+            html.Br(),
+            html.Small(
                 id="counter-summary",
                 children="Summary: 0c 0w",
                 style={"left": "10px", "position": "relative", "margin": "5px"},
             ),
-            html.P(
+            html.Br(),
+            html.Small(
                 id="counter-transcript",
                 children="Transcription: 0c 0w 0d",
                 style={"left": "10px", "position": "relative", "margin": "5px"},
             ),
-            html.P(
+            html.Br(),
+            html.Small(
                 id="counter-audio",
                 children="Audio: 0:00s $0.00",
                 style={"left": "10px", "position": "relative", "margin": "5px"},
             ),
             html.Hr(),
-            html.H5("Previous Projects", id="previous-projects-title"),
+            html.H5("Previous Projects"),
             dcc.Dropdown(
                 id="dropdown-previous-projects",
                 placeholder="Load a past project...",
-                maxHeight=70,
+                maxHeight=100,
+            ),
+            html.Small(
+                id="previous-projects-info",
+                children="You have xx past projects",
+                style={"left": "10px", "position": "relative", "margin": "5px"},
             ),
         ],
         width=3,
@@ -832,7 +840,7 @@ def get_log_dict(*args):
 
 
 @app.callback(
-    Output("previous-projects-title", "children", allow_duplicate=True),  # dummy
+    Output("previous-projects-info", "children", allow_duplicate=True),  # dummy
     Input("stored-audio", "data"),
     State("textarea-file-edit", "value"),
     State("textarea-prompt-summary", "value"),
@@ -874,13 +882,13 @@ def write_checkpoint(audio_data_base64, *args):
     with open(draft_file_path, "w") as draft_file:
         json.dump(draft_dict, draft_file, indent=4)
 
-    return "Previous Projects..."
+    return "Adding a new project..."
 
 
 @app.callback(
     Output("dropdown-previous-projects", "options"),
-    Output("previous-projects-title", "children"),
-    Input("previous-projects-title", "children"),
+    Output("previous-projects-info", "children"),
+    Input("previous-projects-info", "children"),
 )
 def load_previous_projects(dummy):
     """Load the list of previous projects from the CACHE_DIRECTORY and return the list of filenames."""
@@ -891,7 +899,7 @@ def load_previous_projects(dummy):
         if f.endswith(".mp3") and f"{f[:-4]}.json" in files
     ]
     filenames_valid.sort(reverse=True)  # sort from most recent to oldest
-    return filenames_valid, f"Previous Projects ({len(filenames_valid)})"
+    return filenames_valid, f"You have {len(filenames_valid)} past projects"
 
 
 def transcript_dict2text(transcript_dict):
