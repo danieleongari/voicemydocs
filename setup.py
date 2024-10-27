@@ -7,6 +7,7 @@ setup(
     install_requires=[
         "dash",
         "dash-bootstrap-components",
+        "pypdf2~=3.0.1",
         "python-dotenv",
         "openai>=1.0",
         "anthropic",
