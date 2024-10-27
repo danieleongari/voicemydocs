@@ -14,7 +14,7 @@ setup(
     extras_require={
         "dev": [
             "pre-commit",
-            "ruff=0.6.9",
+            "ruff~=0.6.9",
         ],
     },
     entry_points={
