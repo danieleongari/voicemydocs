@@ -5,12 +5,11 @@ setup(
     version="0.1.0",
     packages=find_packages(),
     install_requires=[
-        "dash",
+        "dash~=3.0",
         "dash-bootstrap-components",
         "pypdf2~=3.0.1",
         "python-dotenv",
-        "openai>=1.0",
-        "anthropic",
+        "openai>=1.0",  # tested with 1.74.0
     ],
     extras_require={
         "dev": [

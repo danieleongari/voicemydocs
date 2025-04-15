@@ -1,11 +1,11 @@
 import os
+import argparse
 import base64
 import io
 import json
 from datetime import datetime
 from PyPDF2 import PdfReader
 from openai import OpenAI
-from anthropic import Anthropic
 from dotenv import load_dotenv
 import concurrent.futures as cf
 
@@ -18,7 +18,6 @@ from flask import Flask, send_from_directory
 # Search for a .env file in the current directory and load api key
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 
 ################### CONSTANTS & FUNCTIONS #############################################################################
 
@@ -28,27 +27,34 @@ CACHE_DIRECTORY = os.path.join(
 os.makedirs(CACHE_DIRECTORY, exist_ok=True)
 
 DEFAULT_SUMMARY_PROMPT = """
-A text extraction from a PDF document is provided. It could be highly unstructured.
-You rewrite the document in a more structured way, highlighting the main points.
-In particular you want to highlight:
-* Who are the authors of the document, and what is their expertise
-* A general context of the study
-* The techniques used, going into the details as you were speaking to an expert in the field
-* the results they got, without any speculation: just the facts
-* the importance of the results that they got in a broader context 
-* the limits of their tecniques and analysis, and some skeptical considerations
-Your output is a very long text where all the informations that were present in the original document are present.
-You just output the output report, without replying to the user.
+You are given a text extracted from a PDF document, which may be highly unstructured. 
+Your task is to rewrite the content in a more structured and coherent form, organizing the information logically and clearly.
+
+In particular, focus on highlighting the following aspects:
+
+- Authorship and Expertise: Identify the authors of the document and provide details about their background and areas of expertise.  
+- General Context: Summarize the broader context or motivation of the study.  
+- Methodology: Describe the techniques and methodologies used in the study, including technical details, as if you were explaining them to an expert in the field.  
+- Results: Present the results obtained in the study, strictly reporting the factual findings without adding interpretation or speculation.  
+- Significance: Discuss the relevance and potential impact of the results in a broader scientific or practical context.  
+- Limitations and Critical Evaluation: Point out the limitations of the techniques and analyses used, and include any critical or skeptical considerations that are supported by the text.
+
+Your output should be a comprehensive and detailed text that includes all the information contained in the original document. 
+Do not omit any data or claims present in the source.  
+Return only the rewritten report — do not include any introductory or closing remarks directed at the user.
 """.strip()
 
 DEFAULT_TRANSCRIPT_PROMPT = """
-A text summarization of a document is provided.
-You make the transcript of a conversation between two speakers discussing the main points of the document.
-They are both experts in the field, and they try to address a more general, but phd-level audience.
-The two speakers interact with each other, in a very engaging way for the listener.
-They go through all the information contained in the document, making long and detailled speeches.
+You are given a summarization of a document. 
+Your task is to produce a transcript of a conversation between two speakers who are discussing the main points of the document.
+Both speakers are experts in the field, and they are addressing a general but PhD-level audience. 
+The conversation should be intellectually engaging, with the speakers interacting naturally and dynamically. 
+They should go through all the information in the document, offering long and detailed discussions.
 
-You don't reply to the user, but you just output the conversation between the two speakers using the following format:
+You must include all the content from the original document in the conversation. 
+The style should be conversational yet informative, resembling a high-level academic discussion or podcast.
+
+Format the output as follows:
 <speaker1>
 text
 <speaker2>
@@ -57,31 +63,62 @@ text
 text
 ...
 
-The conversation is long, and the speaker cover all the information contained in the document.
-
+Do not reply to the user—just output the conversation between the two speakers using the format above.
 """.strip()
 
 DEBUG_DIALOGUE = """
-<speaker1>
+<Alice>
 Hello, how are you?
-<speaker2>
+<Berto>
 I'm good, thanks! How about you?
-<speaker1>
+<Alice>
 I'm doing great, thanks for asking!
-<speaker2>
+<Berto>
 That's good to hear!
+<Claudio>
+Hey guys, what are you talking about?
 """.strip()
 
-MODEL_DEFAULT = "gpt-4o-mini"
-
 MODEL_OPTIONS = [
+    "gpt-4.1-nano-2025-04-14",
+    "gpt-4.1-mini-2025-04-14",
+    "gpt-4.1-2025-04-14",
+    "o3-mini-2025-01-31",
+    "gpt-4o-2024-11-20",
     "gpt-4o-2024-08-06",
     "gpt-4o-mini",
-    "claude-3-5-sonnet-20241022",
-    "claude-3-opus-20240229",
-    "claude-3-sonnet-20240229",
-    "claude-3-haiku-20240307",
 ]
+
+MODEL_DEFAULT = MODEL_OPTIONS[0]
+
+TTS_OPTIONS = [
+    {
+        "model": "tts-1",
+        "label": "TTS",
+        "cost": 0.15,  # per 10k chars
+    },
+    {
+        "model": "tts-1-hd",
+        "label": "TTS-HD",
+        "cost": 0.30,  # per 10k chars
+    },
+    {
+        "model": "gpt-4o-mini-tts",
+        "label": "TTS-GPT",
+        "cost": 0.12,  # per 10k chars
+    },
+]
+
+TTS_DEFAULT = TTS_OPTIONS[0]
+
+
+def get_tts_cost(tts_model, n_chars):
+    """Get the cost of the TTS model for the given number of characters."""
+    for option in TTS_OPTIONS:
+        if option["model"] == tts_model:
+            return option["cost"] * n_chars / 10000
+    raise ValueError(f"Unknown TTS model: {tts_model}")
+
 
 VOICE_OPTIONS = [  # https://platform.openai.com/docs/guides/text-to-speech/quickstart
     dict(value="alloy", label="Alloy - pure neutral"),
@@ -114,43 +151,23 @@ def extract_text_from_pdf(pdf_data):
 
 
 def call_llm_api(system_content, user_content, model, api_keys):
-    """Working for both OpenAI and Anthropic API.
-    api_keys is a dictionary with the keys 'openai' and 'anthropic'.
-    """
-    if model.startswith("gpt"):
-        if not api_keys["openai"]:
-            return "Please insert your OpenAI API Key first..."
+    """Call the OpenAI API to get the response from the LLM."""
 
-        client = OpenAI(api_key=api_keys["openai"])
+    if not api_keys["openai"]:
+        return "Please insert your OpenAI API Key first..."
 
-        completion = client.chat.completions.create(
-            model=model,
-            temperature=1.0,
-            messages=[
-                {"role": "system", "content": system_content},
-                {"role": "user", "content": user_content},
-            ],
-        )
+    client = OpenAI(api_key=api_keys["openai"])
 
-        output_content = completion.choices[0].message.content
+    completion = client.chat.completions.create(
+        model=model,
+        temperature=1.0,
+        messages=[
+            {"role": "system", "content": system_content},
+            {"role": "user", "content": user_content},
+        ],
+    )
 
-    else:  # model.startswith("claude")
-        if not api_keys["anthropic"]:
-            return "Please insert your Anthropic API Key first..."
-
-        client = Anthropic(api_key=api_keys["anthropic"])
-
-        messages = client.messages.create(
-            model=model,
-            temperature=1.0,
-            max_tokens=8192 if "claude-3-5" in model else 4096,
-            system=system_content,
-            messages=[
-                {"role": "user", "content": [{"type": "text", "text": user_content}]}
-            ],
-        )
-
-        output_content = messages.content[0].text
+    output_content = completion.choices[0].message.content
 
     return output_content
 
@@ -178,14 +195,19 @@ def dialogue_text2list(dialogue: str) -> list:
 
     lines = [line.strip() for line in dialogue.strip().split("\n") if line.strip()]
     dialogue_list = []
-    current_speaker = None
+    speakers = []
 
     # Iterate through the lines
     for line in lines:
-        if line.lower().startswith("<speaker"):
-            current_speaker = int(line.lower().strip("<speaker>"))
+        if line.strip().startswith("<") and line.strip().endswith(">"):
+            current_speaker = line.strip()
+            if line not in speakers:
+                speakers.append(line)
+        elif len(speakers) > 0:
+            speaker_index = speakers.index(current_speaker) + 1
+            dialogue_list.append({"speaker": speaker_index, "text": line})
         else:
-            dialogue_list.append({"speaker": current_speaker, "text": line})
+            continue
 
     return dialogue_list
 
@@ -193,7 +215,7 @@ def dialogue_text2list(dialogue: str) -> list:
 def compile_dialogue(
     dialogue_text,
     speakers_voice=["nova", "echo", "onyx"],
-    tts_model="tts-1",
+    tts_model=TTS_DEFAULT["model"],
     api_key=None,
 ):
     """Inspired to PDF2Audio"""
@@ -229,8 +251,8 @@ page0 = html.Div(
         html.H1("Welcome to VoiceMyDocs"),
         html.P("Folow the steps to convert a document into an audio file."),
         html.A(
-            "Find here the documentation",
-            href="https://docs.google.com/document/d/11uGi8-3JCu3PSPJdwiG-azg6tphVLogrNuRPy4coHo4/edit?usp=sharing",
+            "Find here the README documentation",
+            href="https://github.com/danieleongari/voicemydocs",
             target="_blank",
         ),
         html.Div(style={"height": "30px"}),
@@ -252,7 +274,10 @@ page0 = html.Div(
                 ),
             ]
         ),
-        html.P("Anthropic API Key", style={"marginTop": "10px", "marginBottom": "0px"}),
+        html.P(
+            "Anthropic API Key (currently not implemented)",
+            style={"marginTop": "10px", "marginBottom": "0px"},
+        ),
         dbc.InputGroup(
             [
                 dbc.Button(
@@ -263,7 +288,7 @@ page0 = html.Div(
                 ),
                 dbc.Input(
                     id="input-anthropic-api-key",
-                    value=ANTHROPIC_API_KEY,
+                    value=None,
                     placeholder="Enter API key...",
                     type="password",
                     style={"width": "250px"},
@@ -307,10 +332,14 @@ page1 = html.Div(
                     width=6,
                 ),
                 dbc.Col(
-                    dcc.Textarea(
-                        id="textarea-file",
-                        style={"width": "100%", "height": "600px"},
-                        readOnly=True,
+                    dcc.Loading(
+                        id="loading-file",
+                        type="circle",
+                        children=dcc.Textarea(
+                            id="textarea-file",
+                            style={"width": "100%", "height": "600px"},
+                            readOnly=True,
+                        ),
                     ),
                     width=6,
                 ),
@@ -484,15 +513,13 @@ page4 = html.Div(
                                 dcc.Dropdown(
                                     id="dropdown-model-tts",
                                     options=[
-                                        dict(
-                                            value="tts-1", label="TTS - $0.15/10k chars"
-                                        ),
-                                        dict(
-                                            value="tts-1-hd",
-                                            label="TTS-HD - $0.30/10k chars",
-                                        ),
+                                        {
+                                            "value": x["model"],
+                                            "label": f"{x['label']} = ${x['cost']}/10k chars",
+                                        }
+                                        for x in TTS_OPTIONS
                                     ],
-                                    value="tts-1",
+                                    value=TTS_DEFAULT["model"],
                                     clearable=False,
                                     style={"marginLeft": "10px", "width": "300px"},
                                 ),
@@ -555,7 +582,7 @@ page4 = html.Div(
                             style={"display": "flex", "alignItems": "center"},
                         ),
                         dbc.Button(
-                            "Convert to Audio",
+                            "Convert to Audio & Save the Project",
                             color="primary",
                             className="mr-1",
                             id="button-tts",
@@ -570,6 +597,9 @@ page4 = html.Div(
                                 controls=True,
                                 style={"width": "100%", "height": "50px"},
                             ),
+                        ),
+                        html.Small(
+                            "NOTE: once you generate the audio, all the previous steps will be saved. Each previous project is labelled with the timedate of creation, and can be loaded from the bottom left dropdown."
                         ),
                     ]
                 ),
@@ -744,10 +774,9 @@ def display_pdf(contents):
     State("textarea-prompt-summary", "value"),
     State("dropdown-model-summary", "value"),
     State("input-openai-api-key", "value"),
-    State("input-anthropic-api-key", "value"),
     prevent_initial_call=True,
 )
-def generate_summary(n_clicks, input_text, prompt, model, openai_key, anthropic_key):
+def generate_summary(n_clicks, input_text, prompt, model, openai_key):
     if input_text is None:
         return "Please upload a document first..."
 
@@ -755,7 +784,7 @@ def generate_summary(n_clicks, input_text, prompt, model, openai_key, anthropic_
         system_content=prompt,
         user_content=input_text,
         model=model,
-        api_keys={"openai": openai_key, "anthropic": anthropic_key},
+        api_keys={"openai": openai_key},
     )
 
     return summary_text, summary_text
@@ -769,10 +798,9 @@ def generate_summary(n_clicks, input_text, prompt, model, openai_key, anthropic_
     State("textarea-prompt-transcript", "value"),
     State("dropdown-model-transcript", "value"),
     State("input-openai-api-key", "value"),
-    State("input-anthropic-api-key", "value"),
     prevent_initial_call=True,
 )
-def generate_transcript(n_clicks, input_text, prompt, model, openai_key, anthropic_key):
+def generate_transcript(n_clicks, input_text, prompt, model, openai_key):
     if input_text is None:
         return "Please upload a document first..."
 
@@ -780,7 +808,7 @@ def generate_transcript(n_clicks, input_text, prompt, model, openai_key, anthrop
         system_content=prompt,
         user_content=input_text,
         model=model,
-        api_keys={"openai": openai_key, "anthropic": anthropic_key},
+        api_keys={"openai": openai_key},
     )
 
     return transcript_text, transcript_text
@@ -958,7 +986,7 @@ def load_previous_project(filename):
             DEFAULT_TRANSCRIPT_PROMPT,
             MODEL_DEFAULT,
             None,
-            "tts-1",
+            TTS_DEFAULT["model"],
             "nova",
             "echo",
             "onyx",
@@ -1028,8 +1056,7 @@ def update_counter_transcript(text, tts_model):
         chars = len(text)
         dialogues = len([x for x in text.strip().split("<speaker") if x])
         estimated_audio_seconds = int(chars * CHARS2SEC)
-        price_per_10k_char = {"tts-1": 0.15, "tts-1-hd": 0.30}[tts_model]
-        estimated_price = chars * price_per_10k_char / 10000
+        estimated_price = get_tts_cost(tts_model, chars)
 
     minutes, seconds = divmod(estimated_audio_seconds, 60)
 
@@ -1040,4 +1067,10 @@ def update_counter_transcript(text, tts_model):
 
 
 if __name__ == "__main__":
-    app.run_server(debug=True)
+    parser = argparse.ArgumentParser(description="Run the VoiceMyDocs app.")
+    parser.add_argument(
+        "--debug", action="store_true", help="Run the app in debug mode."
+    )
+    args = parser.parse_args()
+
+    app.run(debug=args.debug)
