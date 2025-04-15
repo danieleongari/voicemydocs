@@ -32,3 +32,7 @@ pre-commit install
 
 python voicemydocs/app.py --debug
 ```
+
+## Acknowledgements
+
+Credit to [PDF2Audio](https://github.com/lamm-mit/PDF2Audio) for inspiration.
