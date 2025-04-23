@@ -2,6 +2,10 @@
 
 Convert PDF files to engaging audios and podcasts, with full control over the whole process.
 
+Find [here](https://open.spotify.com/show/64UjSlOFGykodZwZILqhlX) some examples 
+based on [this paper on mine](https://pubs.acs.org/doi/full/10.1021/acsami.9b13357), 
+and compared to the two-speakers podcast produced by [NotebookLM](https://notebooklm.google.com/?hl=en).
+
 ## Insallation & Usage
 
 ```bash
